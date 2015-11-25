@@ -10,6 +10,8 @@ __pycache__/
 
 # C extensions
 *.so
+*.d
+*.arm
 
 # Distribution / packaging
 node_modules
