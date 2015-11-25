@@ -14,6 +14,9 @@
 """
 
 import jinja2
+import os
+
+TEMPLATES = os.path.dirname(os.path.abspath(__file__)) + '/resources/'
 
 JENV = jinja2.Environment(block_start_string = '((*',
                           block_end_string = '*))',
@@ -21,6 +24,6 @@ JENV = jinja2.Environment(block_start_string = '((*',
                           variable_end_string = ')))',
                           comment_start_string = '((=',
                           comment_end_string = '=))',
-                          loader=jinja2.FileSystemLoader("./sbpg/targets/resources/"))
+                          loader=jinja2.FileSystemLoader(TEMPLATES))
 
 ACRONYMS = ['GPS', 'ECEF', 'LLH', 'NED', 'IO']
