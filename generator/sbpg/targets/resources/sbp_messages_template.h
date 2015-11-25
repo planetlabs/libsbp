@@ -23,7 +23,7 @@
 #ifndef LIBSBP_(((pkg_name|upper)))_MESSAGES_H
 #define LIBSBP_(((pkg_name|upper)))_MESSAGES_H
 
-#include "common.h"
+#include <messages/common.h>
 ((*- for i in include *))
 #include "(((i)))"
 ((*- endfor *))
