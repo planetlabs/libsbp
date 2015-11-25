@@ -33,6 +33,8 @@ setup(name='sbp_gen',
                    'Programming Language :: Python :: 2.7'
                    ],
       packages=find_packages(),
+      scripts=['sbpg/generator.py'],
+      package_data={'sbpg' : ['targets/resources/*']},
       platforms="Linux,Windows,Mac",
       py_modules=['libsbp'],
       use_2to3=False,
