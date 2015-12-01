@@ -10,8 +10,7 @@
  * WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#include "libsbp/edc.h"
-#include "libsbp/sbp.h"
+#include <libsbp/sbp.h>
 
 #define SBP_PREAMBLE 0x55
 
@@ -107,8 +106,8 @@
  *
  * ~~~
  * // Convenience macro for sending an SBP message.
- * #define SBP_MSG(sbp_state, msg_type, item) \
- *   sbp_send_message(&sbp_state, msg_type, MY_SENDER_ID, \
+ * #define SBP_MSG(sbp_state, appid, item) \
+ *   sbp_send_message(&sbp_state, appid, MY_SENDER_ID, \
  *       sizeof(item), (u8 *)&(item), &my_write)
  *
  * typedef struct {
@@ -149,16 +148,16 @@
 
 /** Register a callback for a message type.
  * Register a callback that is called when a message
- * with type msg_type is received.
+ * with type appid is received.
  *
- * \param msg_type Message type associated with callback
+ * \param appid Message type associated with callback
  * \param cb       Pointer to message callback function
  * \param context  Pointer to context for callback function
  * \param node     Statically allocated #sbp_msg_callbacks_node_t struct
  * \return `SBP_OK` (0) if successful, `SBP_CALLBACK_ERROR` if callback was
  *         already registered for that message type.
  */
-s8 sbp_register_callback(sbp_state_t *s, u16 msg_type, sbp_msg_callback_t cb, void *context,
+s8 sbp_register_callback(sbp_state_t *s, u16 appid, sbp_msg_callback_t cb, void *context,
                          sbp_msg_callbacks_node_t *node)
 {
   /* Check our callback function pointer isn't NULL. */
@@ -170,11 +169,11 @@ s8 sbp_register_callback(sbp_state_t *s, u16 msg_type, sbp_msg_callback_t cb, vo
     return SBP_NULL_ERROR;
 
   /* Check if callback was already registered for this type. */
-  if (sbp_find_callback(s, msg_type) != 0)
+  if (sbp_find_callback(s, appid) != 0)
     return SBP_CALLBACK_ERROR;
 
   /* Fill in our new sbp_msg_callback_node_t. */
-  node->msg_type = msg_type;
+  node->appid = appid;
   node->cb = cb;
   node->context = context;
   /* The next pointer is set to NULL, i.e. this
@@ -215,11 +214,11 @@ void sbp_clear_callbacks(sbp_state_t *s)
  * Searches through the list of registered callbacks to find the callback
  * associated with the passed message type.
  *
- * \param msg_type Message type to find callback for
+ * \param appid Message type to find callback for
  * \return Pointer to callback node (#sbp_msg_callbacks_node_t) or `NULL` if
  *         callback not found for that message type.
  */
-sbp_msg_callbacks_node_t* sbp_find_callback(sbp_state_t *s, u16 msg_type)
+sbp_msg_callbacks_node_t* sbp_find_callback(sbp_state_t *s, u16 appid)
 {
   /* If our list is empty, return NULL. */
   if (!s->sbp_msg_callbacks_head)
@@ -231,7 +230,7 @@ sbp_msg_callbacks_node_t* sbp_find_callback(sbp_state_t *s, u16 msg_type)
    */
   sbp_msg_callbacks_node_t *p = s->sbp_msg_callbacks_head;
   do
-    if (p->msg_type == msg_type)
+    if (p->appid == appid)
       return p;
 
   while ((p = p->next));
@@ -249,8 +248,6 @@ sbp_msg_callbacks_node_t* sbp_find_callback(sbp_state_t *s, u16 msg_type)
  */
 void sbp_state_init(sbp_state_t *s)
 {
-  s->state = WAITING;
-
   /* Set the IO context pointer, passed to read and write functions, to NULL. */
   s->io_context = 0;
 
@@ -309,91 +306,17 @@ void sbp_state_set_io_context(sbp_state_t *s, void *context)
  *         callback, and `SBP_CRC_ERROR` (-2) if a CRC error
  *         has occurred. Thus can check for >0 to ensure good processing.
  */
-s8 sbp_process(sbp_state_t *s, u32 (*read)(u8 *buff, u32 n, void *context))
+s8 sbp_process(sbp_state_t *s, const u8 *buff, u32 n, void *context)
 {
-  u8 temp;
-  u16 crc;
-
-  switch (s->state) {
-  case WAITING:
-    if ((*read)(&temp, 1, s->io_context) == 1)
-      if (temp == SBP_PREAMBLE) {
-        s->n_read = 0;
-        s->state = GET_TYPE;
-      }
-    break;
-
-  case GET_TYPE:
-    s->n_read += (*read)((u8*)&(s->msg_type) + s->n_read,
-                         2-s->n_read, s->io_context);
-    if (s->n_read >= 2) {
-      /* Swap bytes to little endian. */
-      s->n_read = 0;
-      s->state = GET_SENDER;
-    }
-    break;
-
-  case GET_SENDER:
-    s->n_read += (*read)((u8*)&(s->sender_id) + s->n_read,
-                         2-s->n_read, s->io_context);
-    if (s->n_read >= 2) {
-      /* Swap bytes to little endian. */
-      s->state = GET_LEN;
-    }
-    break;
-
-  case GET_LEN:
-    if ((*read)(&(s->msg_len), 1, s->io_context) == 1) {
-      s->n_read = 0;
-      s->state = GET_MSG;
-    }
-    break;
-
-  case GET_MSG:
-    /* Not received whole message yet, try and read some more. */
-    s->n_read += (*read)(
-      &(s->msg_buff[s->n_read]),
-      s->msg_len - s->n_read,
-      s->io_context
-    );
-    if (s->msg_len - s->n_read <= 0) {
-      s->n_read = 0;
-      s->state = GET_CRC;
-    }
-    break;
-
-  case GET_CRC:
-    s->n_read += (*read)((u8*)&(s->crc) + s->n_read,
-                         2-s->n_read, s->io_context);
-    if (s->n_read >= 2) {
-      s->state = WAITING;
-
-      /* Swap bytes to little endian. */
-      crc = crc16_ccitt((u8*)&(s->msg_type), 2, 0);
-      crc = crc16_ccitt((u8*)&(s->sender_id), 2, crc);
-      crc = crc16_ccitt(&(s->msg_len), 1, crc);
-      crc = crc16_ccitt(s->msg_buff, s->msg_len, crc);
-      if (s->crc == crc) {
-
-        /* Message complete, process it. */
-        sbp_msg_callbacks_node_t* node = sbp_find_callback(s, s->msg_type);
-        if (node) {
-          (*node->cb)(s->sender_id, s->msg_len, s->msg_buff, node->context);
-          return SBP_OK_CALLBACK_EXECUTED;
-        } else {
-          return SBP_OK_CALLBACK_UNDEFINED;
-        }
-      } else
-          return SBP_CRC_ERROR;
-    }
-    break;
-
-  default:
-    s->state = WAITING;
-    break;
+  /* process new message */
+  sbp_msg_callbacks_node_t* node = sbp_find_callback(s, (u16)buff[0]);
+  if (node) {
+    /* execute application callback function */
+    (*node->cb)(n, buff, context);
+    return SBP_OK_CALLBACK_EXECUTED;
+  } else {
+    return SBP_OK_CALLBACK_UNDEFINED;
   }
-
-  return SBP_OK;
 }
 
 /** Send SBP messages.
@@ -425,47 +348,47 @@ s8 sbp_process(sbp_state_t *s, u32 (*read)(u8 *buff, u32 n, void *context))
  * \return `SBP_OK` (0) if successful, `SBP_WRITE_ERROR` if the message could
  *         not be sent or was only partially sent.
  */
-s8 sbp_send_message(sbp_state_t *s, u16 msg_type, u16 sender_id, u8 len, u8 *payload,
-                    u32 (*write)(u8 *buff, u32 n, void *context))
-{
-  /* Check our payload data pointer isn't NULL unless len = 0. */
-  if (len != 0 && payload == 0)
-    return SBP_NULL_ERROR;
-
-  /* Check our write function pointer isn't NULL. */
-  if (write == 0)
-    return SBP_NULL_ERROR;
-
-  u16 crc;
-
-  u8 preamble = SBP_PREAMBLE;
-  if ((*write)(&preamble, 1, s->io_context) != 1)
-    return SBP_SEND_ERROR;
-
-  if ((*write)((u8*)&msg_type, 2, s->io_context) != 2)
-    return SBP_SEND_ERROR;
-
-  if ((*write)((u8*)&sender_id, 2, s->io_context) != 2)
-    return SBP_SEND_ERROR;
-
-  if ((*write)(&len, 1, s->io_context) != 1)
-    return SBP_SEND_ERROR;
-
-  if (len > 0) {
-    if ((*write)(payload, len, s->io_context) != len)
-      return SBP_SEND_ERROR;
-  }
-
-  crc = crc16_ccitt((u8*)&(msg_type), 2, 0);
-  crc = crc16_ccitt((u8*)&(sender_id), 2, crc);
-  crc = crc16_ccitt(&(len), 1, crc);
-  crc = crc16_ccitt(payload, len, crc);
-
-  if ((*write)((u8*)&crc, 2, s->io_context) != 2)
-    return SBP_SEND_ERROR;
-
-  return SBP_OK;
-}
+//s8 sbp_send_message(sbp_state_t *s, u16 appid, u16 sender_id, u8 len, u8 *payload,
+//                    u32 (*write)(u8 *buff, u32 n, void *context))
+//{
+//  /* Check our payload data pointer isn't NULL unless len = 0. */
+//  if (len != 0 && payload == 0)
+//    return SBP_NULL_ERROR;
+//
+//  /* Check our write function pointer isn't NULL. */
+//  if (write == 0)
+//    return SBP_NULL_ERROR;
+//
+//  u16 crc;
+//
+//  u8 preamble = SBP_PREAMBLE;
+//  if ((*write)(&preamble, 1, s->io_context) != 1)
+//    return SBP_SEND_ERROR;
+//
+//  if ((*write)((u8*)&appid, 2, s->io_context) != 2)
+//    return SBP_SEND_ERROR;
+//
+//  if ((*write)((u8*)&sender_id, 2, s->io_context) != 2)
+//    return SBP_SEND_ERROR;
+//
+//  if ((*write)(&len, 1, s->io_context) != 1)
+//    return SBP_SEND_ERROR;
+//
+//  if (len > 0) {
+//    if ((*write)(payload, len, s->io_context) != len)
+//      return SBP_SEND_ERROR;
+//  }
+//
+//  crc = crc16_ccitt((u8*)&(appid), 2, 0);
+//  crc = crc16_ccitt((u8*)&(sender_id), 2, crc);
+//  crc = crc16_ccitt(&(len), 1, crc);
+//  crc = crc16_ccitt(payload, len, crc);
+//
+//  if ((*write)((u8*)&crc, 2, s->io_context) != 2)
+//    return SBP_SEND_ERROR;
+//
+//  return SBP_OK;
+//}
 
 /** \} */
 /** \} */
