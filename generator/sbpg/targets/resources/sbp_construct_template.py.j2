@@ -23,7 +23,7 @@ from sbp.utils import fmt_repr, exclude_fields, walk_json_dict, containerize, gr
 from (((module_path))).(((i))) import *
 ((*- endfor *))
 
-# Automatically generated from piksi/yaml/(((filepath))) with generate.py.
+# Automatically generated from (((filepath))) with generate.py.
 # Please do not hand edit!
 
 ((* for m in msgs *))
@@ -135,8 +135,7 @@ class ((( m.identifier | classnameify )))(SBP):
   def __init__(self, sbp=None, **kwargs):
     if sbp:
       super( ((( m.identifier | classnameify ))),
-             self).__init__(sbp.msg_type, sbp.sender, sbp.length,
-                            sbp.payload, sbp.crc)
+             self).__init__(sbp.msg_id)
       ((*- if m.fields *))
       self.from_binary(sbp.payload)
       ((*- else *))
@@ -144,14 +143,12 @@ class ((( m.identifier | classnameify )))(SBP):
       ((*- endif *))
     else:
       super( ((( m.identifier | classnameify ))), self).__init__()
-      self.msg_type = SBP_(((m.identifier)))
-      self.sender = kwargs.pop('sender', SENDER_ID)
+      self.msg_id = SBP_(((m.identifier)))
     ((*- if m.fields*))
       ((*- for f in m.fields *))
       self.(((f.identifier))) = kwargs.pop('(((f.identifier)))')
       ((*- endfor *))
     ((*- else *))
-      self.payload = ""
     ((*- endif *))
 
   def __repr__(self):
