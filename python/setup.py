@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
-from setuptools import setup
+from setuptools import setup, distutils
+from datetime import datetime
 import os
-from sbp.version import VERSION
+import subprocess
+datestring = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
 
 CLASSIFIERS = [
   'Intended Audience :: Developers',
@@ -33,6 +35,22 @@ PACKAGE_DATA = { 'sbp' : [
   'RELEASE-VERSION',
 ] }
 
+
+def get_version():
+    if os.path.exists("PKG-INFO"):
+        metadata = distutils.dist.DistributionMetadata("PKG-INFO")
+        return metadata.version
+    else:
+        try:
+            sha = subprocess.check_output("git rev-parse HEAD", shell=True)[:7]
+            if subprocess.check_output("git diff-index \
+                    --name-only HEAD --", shell=True) != "":
+                sha = sha + "-unc"
+        except subprocess.CalledProcessError:
+            sha = ""
+        return "{0}-{1}".format(datestring, sha)
+
+
 cwd = os.path.abspath(os.path.dirname(__file__))
 with open(cwd + '/README.rst') as f:
   readme = f.read()
@@ -40,10 +58,11 @@ with open(cwd + '/README.rst') as f:
 with open(cwd + '/requirements.txt') as f:
   INSTALL_REQUIRES = [i.strip() for i in f.readlines()]
 
+
 setup(name='sbp',
       description='Python bindings for Swift Binary Protocol',
       long_description=readme,
-      version=VERSION,
+      version=get_version(),
       author='Swift Navigation',
       author_email='dev@swiftnav.com',
       url='https://github.com/swift-nav/libsbp',
@@ -51,6 +70,7 @@ setup(name='sbp',
       packages=PACKAGES,
       platforms=PLATFORMS,
       package_data=PACKAGE_DATA,
+      scripts=['tests/sbp/testapp_tester.py'],
       install_requires=INSTALL_REQUIRES,
       use_2to3=False,
       zip_safe=False)
