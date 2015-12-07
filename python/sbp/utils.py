@@ -13,7 +13,7 @@
 
 """
 
-EXCLUDE = ['sender', 'msg_type', 'crc', 'length', 'preamble', 'payload']
+EXCLUDE = ['msg_id', 'payload']
 
 from construct import Container, Field, OptionalGreedyRange, Rename, StringAdapter
 
