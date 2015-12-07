@@ -14,6 +14,11 @@
 
 #define SBP_PREAMBLE 0x55
 
+
+typedef struct __attribute__((packed)) {
+  uint16_t id;
+} msg_id_t;
+
 /** \addtogroup io Input / Output
  * \{ */
 
@@ -106,8 +111,8 @@
  *
  * ~~~
  * // Convenience macro for sending an SBP message.
- * #define SBP_MSG(sbp_state, appid, item) \
- *   sbp_send_message(&sbp_state, appid, MY_SENDER_ID, \
+ * #define SBP_MSG(sbp_state, msg_id, item) \
+ *   sbp_send_message(&sbp_state, msg_id, MY_SENDER_ID, \
  *       sizeof(item), (u8 *)&(item), &my_write)
  *
  * typedef struct {
@@ -148,16 +153,16 @@
 
 /** Register a callback for a message type.
  * Register a callback that is called when a message
- * with type appid is received.
+ * with type msg_id is received.
  *
- * \param appid Message type associated with callback
+ * \param msg_id Message type associated with callback
  * \param cb       Pointer to message callback function
  * \param context  Pointer to context for callback function
  * \param node     Statically allocated #sbp_msg_callbacks_node_t struct
  * \return `SBP_OK` (0) if successful, `SBP_CALLBACK_ERROR` if callback was
  *         already registered for that message type.
  */
-s8 sbp_register_callback(sbp_state_t *s, u16 appid, sbp_msg_callback_t cb, void *context,
+s8 sbp_register_callback(sbp_state_t *s, u16 msg_id, sbp_msg_callback_t cb, void *context,
                          sbp_msg_callbacks_node_t *node)
 {
   /* Check our callback function pointer isn't NULL. */
@@ -169,11 +174,11 @@ s8 sbp_register_callback(sbp_state_t *s, u16 appid, sbp_msg_callback_t cb, void 
     return SBP_NULL_ERROR;
 
   /* Check if callback was already registered for this type. */
-  if (sbp_find_callback(s, appid) != 0)
+  if (sbp_find_callback(s, msg_id) != 0)
     return SBP_CALLBACK_ERROR;
 
   /* Fill in our new sbp_msg_callback_node_t. */
-  node->appid = appid;
+  node->msg_id = msg_id;
   node->cb = cb;
   node->context = context;
   /* The next pointer is set to NULL, i.e. this
@@ -214,11 +219,11 @@ void sbp_clear_callbacks(sbp_state_t *s)
  * Searches through the list of registered callbacks to find the callback
  * associated with the passed message type.
  *
- * \param appid Message type to find callback for
+ * \param msg_id Message type to find callback for
  * \return Pointer to callback node (#sbp_msg_callbacks_node_t) or `NULL` if
  *         callback not found for that message type.
  */
-sbp_msg_callbacks_node_t* sbp_find_callback(sbp_state_t *s, u16 appid)
+sbp_msg_callbacks_node_t* sbp_find_callback(sbp_state_t *s, u16 msg_id)
 {
   /* If our list is empty, return NULL. */
   if (!s->sbp_msg_callbacks_head)
@@ -230,7 +235,7 @@ sbp_msg_callbacks_node_t* sbp_find_callback(sbp_state_t *s, u16 appid)
    */
   sbp_msg_callbacks_node_t *p = s->sbp_msg_callbacks_head;
   do
-    if (p->appid == appid)
+    if (p->msg_id == msg_id)
       return p;
 
   while ((p = p->next));
@@ -308,11 +313,13 @@ void sbp_state_set_io_context(sbp_state_t *s, void *context)
  */
 s8 sbp_process(sbp_state_t *s, const u8 *buff, u32 n, void *context)
 {
+  msg_id_t *msg_id = (msg_id_t *)buff;
+
   /* process new message */
-  sbp_msg_callbacks_node_t* node = sbp_find_callback(s, (u16)buff[0]);
+  sbp_msg_callbacks_node_t* node = sbp_find_callback(s, msg_id->id);
   if (node) {
-    /* execute application callback function */
-    (*node->cb)(n, buff, context);
+    /* execute message callback function */
+    (*node->cb)(n - sizeof(u16), buff + sizeof(u16), context);
     return SBP_OK_CALLBACK_EXECUTED;
   } else {
     return SBP_OK_CALLBACK_UNDEFINED;
@@ -348,7 +355,7 @@ s8 sbp_process(sbp_state_t *s, const u8 *buff, u32 n, void *context)
  * \return `SBP_OK` (0) if successful, `SBP_WRITE_ERROR` if the message could
  *         not be sent or was only partially sent.
  */
-//s8 sbp_send_message(sbp_state_t *s, u16 appid, u16 sender_id, u8 len, u8 *payload,
+//s8 sbp_send_message(sbp_state_t *s, u16 msg_id, u16 sender_id, u8 len, u8 *payload,
 //                    u32 (*write)(u8 *buff, u32 n, void *context))
 //{
 //  /* Check our payload data pointer isn't NULL unless len = 0. */
@@ -365,7 +372,7 @@ s8 sbp_process(sbp_state_t *s, const u8 *buff, u32 n, void *context)
 //  if ((*write)(&preamble, 1, s->io_context) != 1)
 //    return SBP_SEND_ERROR;
 //
-//  if ((*write)((u8*)&appid, 2, s->io_context) != 2)
+//  if ((*write)((u8*)&msg_id, 2, s->io_context) != 2)
 //    return SBP_SEND_ERROR;
 //
 //  if ((*write)((u8*)&sender_id, 2, s->io_context) != 2)
@@ -379,7 +386,7 @@ s8 sbp_process(sbp_state_t *s, const u8 *buff, u32 n, void *context)
 //      return SBP_SEND_ERROR;
 //  }
 //
-//  crc = crc16_ccitt((u8*)&(appid), 2, 0);
+//  crc = crc16_ccitt((u8*)&(msg_id), 2, 0);
 //  crc = crc16_ccitt((u8*)&(sender_id), 2, crc);
 //  crc = crc16_ccitt(&(len), 1, crc);
 //  crc = crc16_ccitt(payload, len, crc);

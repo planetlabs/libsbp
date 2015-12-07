@@ -36,15 +36,17 @@
 /** Default sender ID. Intended for messages sent from the host to the device. */
 #define SBP_SENDER_ID 0x42
 
+#define MAX_CALLBACKS 64
+
 /** SBP callback function prototype definition. */
-typedef int (*sbp_msg_callback_t)(u8 len, const u8 msg[], void *context);
+typedef void (*sbp_msg_callback_t)(u8 len, const u8 msg[], void *context);
 
 /** SBP callback node.
  * Forms a linked list of callbacks.
  * \note Must be statically allocated for use with sbp_register_callback().
  */
 typedef struct sbp_msg_callbacks_node {
-  u16 appid;                           /**< Application ID associated with callback. */
+  u16 msg_id;                           /**< Message ID associated with callback. */
   sbp_msg_callback_t cb;               /**< Pointer to callback function. */
   void *context;                       /**< Pointer to a context */
   struct sbp_msg_callbacks_node *next; /**< Pointer to next node in list. */
@@ -52,29 +54,24 @@ typedef struct sbp_msg_callbacks_node {
 
 /** State structure for processing SBP messages. */
 typedef struct {
-  u8 appid;
+  u16 msg_id;
   u8 msg_len;
-  u8 msg_buff[256];
   void *io_context;
+  sbp_msg_callbacks_node_t callbacks[MAX_CALLBACKS];
   sbp_msg_callbacks_node_t* sbp_msg_callbacks_head;
 } sbp_state_t;
 
-typedef struct {
-  sbp_state_t state;
-  sbp_msg_callbacks_node_t cb_node;
-  void *context;
-} sbp_msg_subscriber_t;
 
 /** \} */
 
-s8 sbp_register_callback(sbp_state_t* s, u16 appid, sbp_msg_callback_t cb, void* context,
+s8 sbp_register_callback(sbp_state_t* s, u16 msg_id, sbp_msg_callback_t cb, void* context,
                          sbp_msg_callbacks_node_t *node);
 void sbp_clear_callbacks(sbp_state_t* s);
-sbp_msg_callbacks_node_t* sbp_find_callback(sbp_state_t* s, u16 appid);
+sbp_msg_callbacks_node_t* sbp_find_callback(sbp_state_t* s, u16 msg_id);
 void sbp_state_init(sbp_state_t *s);
 void sbp_state_set_io_context(sbp_state_t *s, void* context);
 s8 sbp_process(sbp_state_t *s, const u8 *buff, u32 n, void* context);
-s8 sbp_send_message(sbp_state_t *s, u16 appid, u16 sender_id, u8 len, u8 *payload,
+s8 sbp_send_message(sbp_state_t *s, u16 msg_id, u16 sender_id, u8 len, u8 *payload,
                     u32 (*write)(u8 *buff, u32 n, void* context));
 
 #endif /* LIBSBP_SBP_H */
