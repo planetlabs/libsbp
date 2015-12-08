@@ -26,7 +26,7 @@ from sbp.utils import fmt_repr, exclude_fields, walk_json_dict, containerize, gr
 class testapp_channel(object):
   """testapp_channel.
   
-  Example structure
+  Example channel structure
   
   Parameters
   ----------
@@ -65,8 +65,8 @@ class testapp_channel(object):
       setattr(self, n, getattr(p, n))
 
   def to_binary(self):
-    d = dict([(k, getattr(obj, k)) for k in self.__slots__])
-    return testapp_channel.build(d)
+    #d = dict([(k, getattr(obj, k)) for k in self.__slots__])
+    return testapp_channel.build(self)
     
 SBP_TESTAPP_PING = 0x0068
 class TestappPing(SBP):
@@ -557,21 +557,17 @@ class TestappState(SBP):
   channels : testapp_channel
     Example channel data.
   info : string
-    Info string of length 8 bytes.
-  remaining_channel_array : array
-    Array of testapp_channel structs
+    Info string.
   sender : int
     Optional sender ID, defaults to SENDER_ID (see sbp/msg.py).
 
   """
   _parser = Struct("TestappState",
                    Struct('channels', testapp_channel._parser),
-                   String('info', 8),
-                   Struct('remaining_channel_array', Array(5, Struct('remaining_channel_array', testapp_channel._parser))),)
+                   greedy_string('info'),)
   __slots__ = [
                'channels',
                'info',
-               'remaining_channel_array',
               ]
 
   def __init__(self, sbp=None, **kwargs):
@@ -584,7 +580,6 @@ class TestappState(SBP):
       self.msg_id = SBP_TESTAPP_STATE
       self.channels = kwargs.pop('channels')
       self.info = kwargs.pop('info')
-      self.remaining_channel_array = kwargs.pop('remaining_channel_array')
 
   def __repr__(self):
     return fmt_repr(self)
@@ -627,6 +622,85 @@ class TestappState(SBP):
     d.update(j)
     return d
     
+SBP_TESTAPP_SET_BITFIELD = 0x0076
+class TestappSetBitfield(SBP):
+  """SBP class for message TESTAPP_SET_BITFIELD (0x0076).
+
+  You can have TESTAPP_SET_BITFIELD inherit its fields directly
+  from an inherited SBP object, or construct it inline using a dict
+  of its fields.
+
+  
+  This message demonstrates SBP bitfields.
+
+
+  Parameters
+  ----------
+  sbp : SBP
+    SBP parent object to inherit from.
+  flags : int
+    Flag bitfield
+  sender : int
+    Optional sender ID, defaults to SENDER_ID (see sbp/msg.py).
+
+  """
+  _parser = Struct("TestappSetBitfield",
+                   ULInt8('flags'),)
+  __slots__ = [
+               'flags',
+              ]
+
+  def __init__(self, sbp=None, **kwargs):
+    if sbp:
+      super( TestappSetBitfield,
+             self).__init__(sbp.msg_id)
+      self.from_binary(sbp.payload)
+    else:
+      super( TestappSetBitfield, self).__init__()
+      self.msg_id = SBP_TESTAPP_SET_BITFIELD
+      self.flags = kwargs.pop('flags')
+
+  def __repr__(self):
+    return fmt_repr(self)
+
+  @staticmethod
+  def from_json(s):
+    """Given a JSON-encoded string s, build a message object.
+
+    """
+    d = json.loads(s)
+    return TestappSetBitfield.from_json_dict(d)
+
+  @staticmethod
+  def from_json_dict(d):
+    sbp = SBP.from_json_dict(d)
+    return TestappSetBitfield(sbp, **d)
+
+ 
+  def from_binary(self, d):
+    """Given a binary payload d, update the appropriate payload fields of
+    the message.
+
+    """
+    p = TestappSetBitfield._parser.parse(d)
+    for n in self.__class__.__slots__:
+      setattr(self, n, getattr(p, n))
+
+  def to_binary(self):
+    """Produce a framed/packed SBP message.
+
+    """
+    c = containerize(exclude_fields(self))
+    self.payload = TestappSetBitfield._parser.build(c)
+    return self.pack()
+
+  def to_json_dict(self):
+    self.to_binary()
+    d = super( TestappSetBitfield, self).to_json_dict()
+    j = walk_json_dict(exclude_fields(self))
+    d.update(j)
+    return d
+    
 
 msg_classes = {
   0x0068: TestappPing,
@@ -637,4 +711,5 @@ msg_classes = {
   0x0073: TestappFixedArrayMsg,
   0x0074: TestappVariableArrayMsg,
   0x0075: TestappState,
+  0x0076: TestappSetBitfield,
 }

@@ -82,21 +82,9 @@ def main():
         p = TestappVariableArrayMsg(vector=vector)
 
     elif args.state:
-        channels = list()
+        channel = testapp_channel(c1=4294967295, c2=-32767, c3=255)
         info = '1234567\0'
-        ch0 = testapp_channel(c1=4294967295, c2=-32767, c3=255)
-        ch0.to_binary()
-        ch1 = testapp_channel(c1=1, c2=1, c3=1)
-        ch2 = testapp_channel(c1=2, c2=2, c3=2)
-        ch3 = testapp_channel(c1=3, c2=3, c3=3)
-        ch4 = testapp_channel(c1=4, c2=4, c3=4)
-        ch5 = testapp_channel(c1=5, c2=5, c3=5)
-        channels.append(ch1)
-        channels.append(ch2)
-        channels.append(ch3)
-        channels.append(ch4)
-        channels.append(ch5)
-        p = TestappState(channels={'testapp_channel' : ch0}, info=info, remaining_channel_array={'remaining_channel_array' : channels})
+        p = TestappState(channels=channel, info=info)
 
     else:
         parser.print_usage()
@@ -109,7 +97,7 @@ def main():
     m.data = p.to_binary()
     m.length = len(m.data)
 
-    print ("Sending {0}-byte packet: {1}".format(m.length, str(p.to_json())))
+    print ("Sending {0}-byte packet: {1}".format(m.length, str(p.to_json_dict())))
     req = B6Arq(SatFile('7', radio_type="DEBUG"), TranslatorB6('7'))
     req.send_once(m, 0)
 
